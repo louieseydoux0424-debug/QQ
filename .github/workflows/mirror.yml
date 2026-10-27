@@ -1,25 +1,28 @@
-name: Mirror NapCat to GHCR
+name: Export NapCat as chunks
 
 on:
   workflow_dispatch: {}
 
 permissions:
-  packages: write
-  contents: read
+  contents: write
 
 jobs:
-  mirror:
+  export:
     runs-on: ubuntu-latest
     steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - name: Pull, tag and push NapCat
+      - name: Pull, save, split
         run: |
           docker pull mlikiowa/napcat-docker:latest
-          docker tag mlikiowa/napcat-docker:latest ghcr.io/${{ github.repository_owner }}/napcat-docker:latest
-          docker push ghcr.io/${{ github.repository_owner }}/napcat-docker:latest
+          rm -rf chunks && mkdir -p chunks
+          docker save mlikiowa/napcat-docker:latest | gzip | split -b 80M -d - chunks/napcat.tar.gz.part
+          ls -lh chunks/
+
+      - name: Commit and push chunks
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add chunks/
+          git commit -m "Add napcat image chunks" || echo "no changes"
+          git push
